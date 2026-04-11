@@ -105,6 +105,22 @@ export async function deleteHistory(entryId: string): Promise<void> {
   if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
 }
 
+export async function renameHistory(
+  entryId: string,
+  title: string,
+): Promise<HistoryEntry> {
+  const res = await fetch(`${API_BASE}/api/history/${entryId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail ?? "Rename failed");
+  }
+  return res.json();
+}
+
 export function historyPreviewUrl(entryId: string): string {
   return `${API_BASE}/api/history/${entryId}/preview`;
 }

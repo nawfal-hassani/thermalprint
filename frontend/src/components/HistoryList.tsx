@@ -7,6 +7,7 @@ import {
   deleteHistory,
   fetchHistory,
   historyPreviewUrl,
+  renameHistory,
   reprintHistory,
 } from "@/lib/api";
 
@@ -31,6 +32,8 @@ export function HistoryList({
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [reprintingId, setReprintingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -60,6 +63,34 @@ export function HistoryList({
       });
     } finally {
       setReprintingId(null);
+    }
+  };
+
+  const startEdit = (entry: HistoryEntry) => {
+    setEditingId(entry.id);
+    setEditTitle(entry.title);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditTitle("");
+  };
+
+  const saveEdit = async (entry: HistoryEntry) => {
+    const next = editTitle.trim();
+    if (!next || next === entry.title) {
+      cancelEdit();
+      return;
+    }
+    try {
+      const updated = await renameHistory(entry.id, next);
+      setEntries((prev) => prev.map((e) => (e.id === entry.id ? updated : e)));
+    } catch (e) {
+      onMessage({
+        error: e instanceof Error ? e.message : "Renommage échoué",
+      });
+    } finally {
+      cancelEdit();
     }
   };
 
@@ -111,12 +142,37 @@ export function HistoryList({
               />
               <div className="flex flex-1 flex-col justify-between">
                 <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{entry.title}</span>
-                    <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-                      {entry.source}
-                    </span>
-                  </div>
+                  {editingId === entry.id ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        autoFocus
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveEdit(entry);
+                          if (e.key === "Escape") cancelEdit();
+                        }}
+                        onBlur={() => saveEdit(entry)}
+                        className="flex-1 rounded-md border border-blue-400 bg-white px-2 py-1 text-sm outline-none focus:border-blue-500 dark:border-blue-600 dark:bg-zinc-900"
+                      />
+                      <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                        {entry.source}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => startEdit(entry)}
+                        className="truncate text-left font-medium hover:text-blue-600 dark:hover:text-blue-400"
+                        title="Cliquer pour renommer"
+                      >
+                        {entry.title}
+                      </button>
+                      <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                        {entry.source}
+                      </span>
+                    </div>
+                  )}
                   <div className="text-xs text-zinc-500 dark:text-zinc-400">
                     {formatDate(entry.created_at)} · {entry.printer_name}
                   </div>
@@ -128,6 +184,12 @@ export function HistoryList({
                     className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                   >
                     {reprintingId === entry.id ? "..." : "Ré-imprimer"}
+                  </button>
+                  <button
+                    onClick={() => startEdit(entry)}
+                    className="rounded-md border border-zinc-200 px-2.5 py-1 text-xs font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+                  >
+                    Renommer
                   </button>
                   <button
                     onClick={() => handleDelete(entry)}

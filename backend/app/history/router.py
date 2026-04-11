@@ -44,6 +44,21 @@ def reprint(entry_id: str, req: ReprintRequest):
     return {"status": "sent", "entry_id": entry_id, "printer_id": target}
 
 
+class RenameRequest(BaseModel):
+    title: str
+
+
+@router.patch("/{entry_id}")
+def rename_entry(entry_id: str, req: RenameRequest):
+    title = req.title.strip()
+    if not title:
+        raise HTTPException(400, "Title cannot be empty")
+    entry = store.rename(entry_id, title)
+    if entry is None:
+        raise HTTPException(404, "Entry not found")
+    return entry.to_dict()
+
+
 @router.delete("/{entry_id}")
 def delete_entry(entry_id: str):
     if not store.delete(entry_id):

@@ -87,6 +87,19 @@ def get(entry_id: str) -> Optional[HistoryEntry]:
         return None
 
 
+def rename(entry_id: str, title: str) -> Optional[HistoryEntry]:
+    path = _path(entry_id)
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text())
+    except Exception:
+        return None
+    data["title"] = title
+    path.write_text(json.dumps(data, indent=2))
+    return HistoryEntry(**data)
+
+
 def delete(entry_id: str) -> bool:
     path = _path(entry_id)
     if not path.exists():

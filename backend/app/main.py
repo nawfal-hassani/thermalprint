@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .printers.router import router as printers_router
+
 app = FastAPI(
     title="ThermalPrint Studio",
     description="Universal ESC/POS thermal printer control",
@@ -14,6 +16,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+app.include_router(printers_router)
 
 
 @app.get("/api/health")

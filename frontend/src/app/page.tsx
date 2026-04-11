@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { HistoryList } from "@/components/HistoryList";
+import { PdfEditor } from "@/components/PdfEditor";
 import { PdfUploader } from "@/components/PdfUploader";
 import { PrinterList } from "@/components/PrinterList";
 import { TicketEditor } from "@/components/TicketEditor";
@@ -10,6 +11,7 @@ import {
   ConvertResponse,
   Printer,
   TicketData,
+  compositeToJob,
   convertPdf,
   fetchPrinters,
   previewUrl,
@@ -18,7 +20,7 @@ import {
   scanNetwork,
 } from "@/lib/api";
 
-type Tab = "pdf" | "editor";
+type Tab = "pdf" | "editor" | "pdfedit";
 
 export default function Home() {
   const [printers, setPrinters] = useState<Printer[]>([]);
@@ -90,6 +92,26 @@ export default function Home() {
         setLastTitle(file.name.replace(/\.pdf$/i, ""));
       } catch (e) {
         setError(e instanceof Error ? e.message : "Conversion échouée");
+      } finally {
+        setConverting(false);
+      }
+    },
+    [widthDots],
+  );
+
+  const handleComposite = useCallback(
+    async (blob: Blob) => {
+      setConverting(true);
+      setError(null);
+      setSuccess(null);
+      setPreview(null);
+      try {
+        const result = await compositeToJob(blob, widthDots);
+        setPreview(result);
+        setLastSource("pdf");
+        setLastTitle("PDF édité");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Export échoué");
       } finally {
         setConverting(false);
       }
@@ -171,20 +193,26 @@ export default function Home() {
 
         <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <div className="mb-4 flex gap-1 rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800">
-            {(["pdf", "editor"] as Tab[]).map((t) => (
+            {(
+              [
+                { key: "pdf", label: "Importer un PDF" },
+                { key: "pdfedit", label: "Éditer un PDF" },
+                { key: "editor", label: "Créer un ticket" },
+              ] as { key: Tab; label: string }[]
+            ).map((t) => (
               <button
-                key={t}
+                key={t.key}
                 onClick={() => {
-                  setTab(t);
+                  setTab(t.key);
                   setPreview(null);
                 }}
                 className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition ${
-                  tab === t
+                  tab === t.key
                     ? "bg-white shadow-sm dark:bg-zinc-900"
                     : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
                 }`}
               >
-                {t === "pdf" ? "Importer un PDF" : "Éditeur de ticket"}
+                {t.label}
               </button>
             ))}
           </div>
@@ -193,6 +221,13 @@ export default function Home() {
             tab === "pdf" ? (
               <PdfUploader
                 onFile={handlePdfFile}
+                disabled={converting || !selectedId}
+              />
+            ) : tab === "pdfedit" ? (
+              <PdfEditor
+                widthDots={widthDots}
+                onCompose={handleComposite}
+                onError={(msg) => setError(msg)}
                 disabled={converting || !selectedId}
               />
             ) : (

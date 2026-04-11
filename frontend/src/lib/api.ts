@@ -25,6 +25,43 @@ export async function fetchPrinters(): Promise<Printer[]> {
   return res.json();
 }
 
+export type EditImageResponse = {
+  edit_id: string;
+  image_url: string;
+  width: number;
+  height: number;
+};
+
+export async function uploadPdfForEdit(file: File): Promise<EditImageResponse> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${API_BASE}/api/convert/pdf-edit`, {
+    method: "POST",
+    body: form,
+  });
+  if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+  return res.json();
+}
+
+export function editImageUrl(editId: string): string {
+  return `${API_BASE}/api/convert/edit-image/${editId}`;
+}
+
+export async function compositeToJob(
+  blob: Blob,
+  widthDots: number,
+): Promise<ConvertResponse> {
+  const form = new FormData();
+  form.append("file", blob, "composite.png");
+  form.append("width_dots", String(widthDots));
+  const res = await fetch(`${API_BASE}/api/convert/composite`, {
+    method: "POST",
+    body: form,
+  });
+  if (!res.ok) throw new Error(`Composite failed: ${res.status}`);
+  return res.json();
+}
+
 export async function convertPdf(
   file: File,
   widthDots: number,

@@ -6,7 +6,12 @@ from pathlib import Path
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
-from .pdf_to_ticket import ConversionError, pdf_to_thermal_png
+from .pdf_to_ticket import (
+    ConversionError,
+    image_to_thermal_png,
+    pdf_to_edit_png,
+    pdf_to_thermal_png,
+)
 
 router = APIRouter(prefix="/api/convert", tags=["convert"])
 
@@ -47,3 +52,60 @@ def preview(job_id: str):
     if not png_path.exists():
         raise HTTPException(404, "Preview not found")
     return FileResponse(png_path, media_type="image/png")
+
+
+@router.post("/pdf-edit")
+async def convert_pdf_for_edit(file: UploadFile = File(...)):
+    """Render a PDF as a tall grayscale PNG for the editor canvas."""
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(400, "Only PDF files are accepted")
+
+    job_id = uuid.uuid4().hex[:12]
+    pdf_path = UPLOAD_DIR / f"{job_id}-src.pdf"
+    png_path = UPLOAD_DIR / f"{job_id}-edit.png"
+    pdf_path.write_bytes(await file.read())
+
+    try:
+        _, w, h = pdf_to_edit_png(pdf_path, png_path)
+    except ConversionError as e:
+        raise HTTPException(500, str(e))
+
+    return {
+        "edit_id": job_id,
+        "image_url": f"/api/convert/edit-image/{job_id}",
+        "width": w,
+        "height": h,
+    }
+
+
+@router.get("/edit-image/{edit_id}")
+def edit_image(edit_id: str):
+    png_path = UPLOAD_DIR / f"{edit_id}-edit.png"
+    if not png_path.exists():
+        raise HTTPException(404, "Edit image not found")
+    return FileResponse(png_path, media_type="image/png")
+
+
+@router.post("/composite")
+async def composite_to_print_job(
+    file: UploadFile = File(...),
+    width_dots: int = Form(512),
+):
+    """Accept a flattened PNG from the editor and turn it into a
+    thermal-ready print job the existing /api/print endpoint can use.
+    """
+    job_id = uuid.uuid4().hex[:12]
+    raw_path = UPLOAD_DIR / f"{job_id}-raw.png"
+    png_path = UPLOAD_DIR / f"{job_id}.png"
+    raw_path.write_bytes(await file.read())
+
+    try:
+        image_to_thermal_png(raw_path, png_path, width_dots=width_dots, trim=False)
+    except ConversionError as e:
+        raise HTTPException(500, str(e))
+
+    return {
+        "job_id": job_id,
+        "preview_url": f"/api/convert/preview/{job_id}",
+        "width_dots": width_dots,
+    }

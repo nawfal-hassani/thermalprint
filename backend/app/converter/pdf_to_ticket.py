@@ -123,3 +123,32 @@ def pdf_to_thermal_png(
         stitch_pages(pages, stitched)
         trim_and_resize(stitched, out_path, width_dots=width_dots, trim=trim)
     return out_path
+
+
+def pdf_to_edit_png(pdf_path: Path, out_path: Path, dpi: int = 150) -> tuple[Path, int, int]:
+    """Render a PDF as one tall grayscale PNG for the web editor.
+
+    No trimming, no dithering: the frontend needs crisp pixels to
+    render on a canvas and overlay annotations before we send the
+    composite through the print pipeline.
+    """
+    with tempfile.TemporaryDirectory(prefix="thermalprint-") as tmp:
+        tmp_dir = Path(tmp)
+        pages = render_pdf_pages(pdf_path, tmp_dir, dpi=dpi)
+        stitch_pages(pages, out_path)
+
+    img = Image.open(out_path).convert("L")
+    img.save(out_path, "PNG")
+    return out_path, img.width, img.height
+
+
+def image_to_thermal_png(
+    src: Path,
+    dst: Path,
+    width_dots: int = 512,
+    trim: bool = False,
+) -> Path:
+    """Take an arbitrary PNG (e.g. a composite from the editor) and
+    produce a thermal-ready 1-bit PNG."""
+    trim_and_resize(src, dst, width_dots=width_dots, trim=trim)
+    return dst

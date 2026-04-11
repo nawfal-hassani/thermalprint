@@ -8,9 +8,12 @@ set, which lets us pick a sensible print width without the user guessing.
 
 from __future__ import annotations
 
+import concurrent.futures
 import glob
+import ipaddress
 import os
 import re
+import socket
 from typing import Optional
 
 from .models import Printer
@@ -91,6 +94,105 @@ def detect_usb_printers() -> list[Printer]:
     return printers
 
 
-def detect_all() -> list[Printer]:
-    """Detect every printer we can see. Network + serial come later."""
-    return detect_usb_printers()
+def detect_serial_printers() -> list[Printer]:
+    """Any /dev/ttyUSB* or /dev/ttyACM* is a candidate serial printer.
+
+    We can't know for sure it's an ESC/POS device without probing, and
+    probing blindly can confuse non-printer devices. For now we expose
+    the candidates so the user can pick; the print step will send the
+    ESC/POS bytes and fail loudly if it's the wrong device.
+    """
+    printers: list[Printer] = []
+    for path in sorted(glob.glob("/dev/ttyUSB*") + glob.glob("/dev/ttyACM*")):
+        name = f"Serial device ({os.path.basename(path)})"
+        printers.append(
+            Printer(
+                id=f"serial:{os.path.basename(path)}",
+                name=name,
+                vendor=None,
+                model=None,
+                connection="serial",
+                device_path=path,
+                width_dots=WIDTH_80MM,
+                online=os.path.exists(path),
+            )
+        )
+    return printers
+
+
+def _probe_raw_port(host: str, port: int = 9100, timeout: float = 0.4) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except (OSError, socket.timeout):
+        return False
+
+
+def _local_subnet() -> Optional[ipaddress.IPv4Network]:
+    """Best-effort: guess the primary /24 subnet of this host."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ipaddress.ip_network(f"{ip}/24", strict=False)
+    except OSError:
+        return None
+
+
+def detect_network_printers(
+    subnet: Optional[str] = None,
+    port: int = 9100,
+) -> list[Printer]:
+    """Scan a subnet for raw-print (JetDirect/port 9100) listeners.
+
+    This is opt-in because it walks 254 hosts. The default subnet is
+    derived from the machine's primary interface. Callers can override
+    with an explicit CIDR like '192.168.1.0/24'.
+    """
+    net = (
+        ipaddress.ip_network(subnet, strict=False)
+        if subnet
+        else _local_subnet()
+    )
+    if net is None:
+        return []
+
+    hosts = [str(h) for h in net.hosts()]
+    found: list[Printer] = []
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=64) as ex:
+        futures = {ex.submit(_probe_raw_port, h, port): h for h in hosts}
+        for fut in concurrent.futures.as_completed(futures):
+            host = futures[fut]
+            try:
+                if fut.result():
+                    found.append(
+                        Printer(
+                            id=f"net:{host}:{port}",
+                            name=f"Network printer ({host})",
+                            vendor=None,
+                            model=None,
+                            connection="network",
+                            device_path=f"{host}:{port}",
+                            width_dots=WIDTH_80MM,
+                            online=True,
+                        )
+                    )
+            except Exception:
+                continue
+
+    return sorted(found, key=lambda p: p.device_path)
+
+
+def detect_all(scan_network: bool = False) -> list[Printer]:
+    """Detect every printer we can see.
+
+    Network scanning is gated behind a flag because it's slow (~1s) and
+    not always desired. The printers router exposes this toggle as a
+    query parameter so the UI can offer an explicit 'Scan network' action.
+    """
+    printers = detect_usb_printers() + detect_serial_printers()
+    if scan_network:
+        printers += detect_network_printers()
+    return printers

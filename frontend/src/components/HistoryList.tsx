@@ -94,6 +94,27 @@ export function HistoryList({
     }
   };
 
+  const handleDownload = async (entry: HistoryEntry) => {
+    try {
+      const res = await fetch(historyPreviewUrl(entry.id));
+      if (!res.ok) throw new Error("Téléchargement échoué");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const safe = entry.title.replace(/[^a-zA-Z0-9-_]+/g, "_") || "ticket";
+      a.download = `${safe}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      onMessage({
+        error: e instanceof Error ? e.message : "Téléchargement échoué",
+      });
+    }
+  };
+
   const handleDelete = async (entry: HistoryEntry) => {
     try {
       await deleteHistory(entry.id);
@@ -184,6 +205,12 @@ export function HistoryList({
                     className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                   >
                     {reprintingId === entry.id ? "..." : "Ré-imprimer"}
+                  </button>
+                  <button
+                    onClick={() => handleDownload(entry)}
+                    className="rounded-md border border-zinc-200 px-2.5 py-1 text-xs font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+                  >
+                    Télécharger
                   </button>
                   <button
                     onClick={() => startEdit(entry)}

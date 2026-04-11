@@ -125,7 +125,7 @@ def pdf_to_thermal_png(
     return out_path
 
 
-def pdf_to_edit_png(pdf_path: Path, out_path: Path, dpi: int = 200) -> tuple[Path, int, int]:
+def pdf_to_edit_png(pdf_path: Path, out_path: Path, dpi: int = 300) -> tuple[Path, int, int]:
     """Render a PDF as one tall grayscale PNG for the web editor.
 
     No trimming, no dithering: the frontend needs crisp pixels to

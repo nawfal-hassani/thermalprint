@@ -39,21 +39,29 @@ def _open(printer: Printer):
 def print_image(printer_id: str, image_path: Path, cut: bool = True) -> None:
     printer = _find_printer(printer_id)
 
+    # python-escpos opens the device lazily on first I/O, so wrap the
+    # entire session. Any error surfaces as a PrintError that the router
+    # converts to a clean 500 with CORS headers.
+    p = None
     try:
         p = _open(printer)
-    except Exception as e:
-        raise PrintError(
-            f"Could not open {printer.device_path}: {e}. "
-            "Check permissions (USB: 'lp' group) or network reachability."
-        ) from e
-
-    try:
         p.image(str(image_path))
         p.text("\n\n")
         if cut:
             p.cut()
+    except PermissionError as e:
+        raise PrintError(
+            f"Permission refusée sur {printer.device_path}. "
+            "Ajoute ton utilisateur au groupe 'lp' puis reconnecte-toi : "
+            f"sudo usermod -aG lp $USER"
+        ) from e
+    except Exception as e:
+        raise PrintError(
+            f"Échec d'impression sur {printer.device_path}: {e}"
+        ) from e
     finally:
-        try:
-            p.close()
-        except Exception:
-            pass
+        if p is not None:
+            try:
+                p.close()
+            except Exception:
+                pass

@@ -34,8 +34,8 @@ def _require_tool(name: str) -> str:
     return path
 
 
-def render_pdf_page(pdf_path: Path, out_dir: Path, dpi: int = 203) -> Path:
-    """Render the first page of a PDF to PNG using pdftoppm."""
+def render_pdf_pages(pdf_path: Path, out_dir: Path, dpi: int = 203) -> list[Path]:
+    """Render every page of a PDF to PNG using pdftoppm."""
     _require_tool("pdftoppm")
     prefix = out_dir / "page"
     subprocess.run(
@@ -43,8 +43,6 @@ def render_pdf_page(pdf_path: Path, out_dir: Path, dpi: int = 203) -> Path:
             "pdftoppm",
             "-r", str(dpi),
             "-png",
-            "-f", "1",
-            "-l", "1",
             str(pdf_path),
             str(prefix),
         ],
@@ -54,7 +52,26 @@ def render_pdf_page(pdf_path: Path, out_dir: Path, dpi: int = 203) -> Path:
     pages = sorted(out_dir.glob("page-*.png"))
     if not pages:
         raise ConversionError("pdftoppm produced no output")
-    return pages[0]
+    return pages
+
+
+def stitch_pages(pages: list[Path], out_path: Path, gap: int = 0) -> Path:
+    """Stack multiple rendered pages vertically into one image."""
+    imgs = [Image.open(p).convert("L") for p in pages]
+    # All pages from the same PDF share the same width at a fixed DPI.
+    width = max(img.width for img in imgs)
+    total_height = sum(img.height for img in imgs) + gap * max(0, len(imgs) - 1)
+
+    canvas = Image.new("L", (width, total_height), 255)
+    y = 0
+    for idx, img in enumerate(imgs):
+        # Center narrower pages (rare, but possible with mixed sizes).
+        x = (width - img.width) // 2
+        canvas.paste(img, (x, y))
+        y += img.height + (gap if idx < len(imgs) - 1 else 0)
+
+    canvas.save(out_path, "PNG")
+    return out_path
 
 
 def trim_and_resize(
@@ -94,9 +111,15 @@ def pdf_to_thermal_png(
     width_dots: int = 512,
     trim: bool = True,
 ) -> Path:
-    """High-level entry point: PDF → thermal-ready PNG on disk."""
+    """High-level entry point: PDF → thermal-ready PNG on disk.
+
+    Every page of the PDF is rendered and stacked vertically so a
+    multi-page invoice prints as one continuous receipt.
+    """
     with tempfile.TemporaryDirectory(prefix="thermalprint-") as tmp:
         tmp_dir = Path(tmp)
-        rendered = render_pdf_page(pdf_path, tmp_dir)
-        trim_and_resize(rendered, out_path, width_dots=width_dots, trim=trim)
+        pages = render_pdf_pages(pdf_path, tmp_dir)
+        stitched = tmp_dir / "stitched.png"
+        stitch_pages(pages, stitched)
+        trim_and_resize(stitched, out_path, width_dots=width_dots, trim=trim)
     return out_path

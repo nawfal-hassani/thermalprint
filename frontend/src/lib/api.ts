@@ -81,6 +81,34 @@ export function statusWsUrl(printerId: string): string {
   return `${base}/api/status/ws/${encodeURIComponent(printerId)}`;
 }
 
+export type TicketItem = {
+  name: string;
+  quantity: number;
+  unit_price: number;
+};
+
+export type TicketData = {
+  shop_name: string;
+  address?: string;
+  phone?: string;
+  items: TicketItem[];
+  tax_rate: number;
+  currency: string;
+  footer?: string;
+  qr_url?: string;
+  width_dots: number;
+};
+
+export async function renderTicket(data: TicketData): Promise<ConvertResponse> {
+  const res = await fetch(`${API_BASE}/api/ticket/render`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(`Render failed: ${res.status}`);
+  return res.json();
+}
+
 export async function scanNetwork(subnet?: string): Promise<Printer[]> {
   const url = new URL(`${API_BASE}/api/printers/scan-network`);
   if (subnet) url.searchParams.set("subnet", subnet);

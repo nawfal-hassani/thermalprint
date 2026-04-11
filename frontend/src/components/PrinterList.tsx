@@ -1,12 +1,16 @@
 "use client";
 
 import { Printer } from "@/lib/api";
+import { StatusBadge } from "./StatusBadge";
+import { usePrinterStatus } from "@/lib/useStatus";
 
 type Props = {
   printers: Printer[];
   selectedId: string | null;
   onSelect: (id: string) => void;
   onRefresh: () => void;
+  onScanNetwork: () => void;
+  scanningNetwork: boolean;
   loading: boolean;
 };
 
@@ -15,8 +19,11 @@ export function PrinterList({
   selectedId,
   onSelect,
   onRefresh,
+  onScanNetwork,
+  scanningNetwork,
   loading,
 }: Props) {
+  const liveStatus = usePrinterStatus(selectedId);
   return (
     <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
       <div className="mb-4 flex items-center justify-between">
@@ -27,14 +34,33 @@ export function PrinterList({
             {printers.length > 1 ? "s" : ""}
           </p>
         </div>
-        <button
-          onClick={onRefresh}
-          disabled={loading}
-          className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-sm font-medium hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700"
-        >
-          {loading ? "..." : "Actualiser"}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={onScanNetwork}
+            disabled={scanningNetwork}
+            className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-sm font-medium hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+            title="Scanner le réseau local pour trouver des imprimantes sur le port 9100"
+          >
+            {scanningNetwork ? "Scan..." : "Réseau"}
+          </button>
+          <button
+            onClick={onRefresh}
+            disabled={loading}
+            className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-sm font-medium hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+          >
+            {loading ? "..." : "Actualiser"}
+          </button>
+        </div>
       </div>
+
+      {selectedId && (
+        <div className="mb-4 rounded-xl bg-zinc-50 px-3 py-2 dark:bg-zinc-950/50">
+          <div className="mb-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+            Statut en temps réel
+          </div>
+          <StatusBadge status={liveStatus} />
+        </div>
+      )}
 
       {printers.length === 0 ? (
         <div className="rounded-xl border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">

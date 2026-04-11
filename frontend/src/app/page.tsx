@@ -4,24 +4,35 @@ import { useCallback, useEffect, useState } from "react";
 
 import { PdfUploader } from "@/components/PdfUploader";
 import { PrinterList } from "@/components/PrinterList";
+import { TicketEditor } from "@/components/TicketEditor";
 import {
   ConvertResponse,
   Printer,
+  TicketData,
   convertPdf,
   fetchPrinters,
   previewUrl,
   printJob,
+  renderTicket,
+  scanNetwork,
 } from "@/lib/api";
+
+type Tab = "pdf" | "editor";
 
 export default function Home() {
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loadingPrinters, setLoadingPrinters] = useState(false);
+  const [scanningNetwork, setScanningNetwork] = useState(false);
   const [converting, setConverting] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [preview, setPreview] = useState<ConvertResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>("pdf");
+
+  const selectedPrinter = printers.find((p) => p.id === selectedId);
+  const widthDots = selectedPrinter?.width_dots ?? 512;
 
   const refreshPrinters = useCallback(async () => {
     setLoadingPrinters(true);
@@ -37,20 +48,39 @@ export default function Home() {
     }
   }, []);
 
+  const handleScanNetwork = useCallback(async () => {
+    setScanningNetwork(true);
+    setError(null);
+    try {
+      const netPrinters = await scanNetwork();
+      setPrinters((prev) => {
+        const existing = new Set(prev.map((p) => p.id));
+        return [...prev, ...netPrinters.filter((p) => !existing.has(p.id))];
+      });
+      setSuccess(
+        netPrinters.length === 0
+          ? "Aucune imprimante réseau trouvée."
+          : `${netPrinters.length} imprimante(s) réseau ajoutée(s).`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Scan réseau échoué");
+    } finally {
+      setScanningNetwork(false);
+    }
+  }, []);
+
   useEffect(() => {
     refreshPrinters();
   }, [refreshPrinters]);
 
-  const handleFile = useCallback(
+  const handlePdfFile = useCallback(
     async (file: File) => {
       setConverting(true);
       setError(null);
       setSuccess(null);
       setPreview(null);
       try {
-        const selected = printers.find((p) => p.id === selectedId);
-        const width = selected?.width_dots ?? 512;
-        const result = await convertPdf(file, width, true);
+        const result = await convertPdf(file, widthDots, true);
         setPreview(result);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Conversion échouée");
@@ -58,7 +88,25 @@ export default function Home() {
         setConverting(false);
       }
     },
-    [printers, selectedId],
+    [widthDots],
+  );
+
+  const handleRenderTicket = useCallback(
+    async (data: TicketData) => {
+      setConverting(true);
+      setError(null);
+      setSuccess(null);
+      setPreview(null);
+      try {
+        const result = await renderTicket(data);
+        setPreview(result);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Rendu échoué");
+      } finally {
+        setConverting(false);
+      }
+    },
+    [],
   );
 
   const handlePrint = useCallback(async () => {
@@ -77,14 +125,13 @@ export default function Home() {
   }, [preview, selectedId]);
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-4 py-10">
+    <main className="mx-auto w-full max-w-6xl px-4 py-10">
       <header className="mb-8">
         <h1 className="text-3xl font-bold tracking-tight">
           ThermalPrint Studio
         </h1>
         <p className="mt-1 text-zinc-600 dark:text-zinc-400">
-          Imprimez n&apos;importe quel PDF sur vos imprimantes thermiques
-          ESC/POS.
+          Imprimez un PDF ou composez votre propre ticket.
         </p>
       </header>
 
@@ -99,25 +146,53 @@ export default function Home() {
         </div>
       )}
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
         <PrinterList
           printers={printers}
           selectedId={selectedId}
           onSelect={setSelectedId}
           onRefresh={refreshPrinters}
+          onScanNetwork={handleScanNetwork}
+          scanningNetwork={scanningNetwork}
           loading={loadingPrinters}
         />
 
         <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <h2 className="mb-4 text-lg font-semibold">Imprimer un PDF</h2>
+          <div className="mb-4 flex gap-1 rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800">
+            {(["pdf", "editor"] as Tab[]).map((t) => (
+              <button
+                key={t}
+                onClick={() => {
+                  setTab(t);
+                  setPreview(null);
+                }}
+                className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                  tab === t
+                    ? "bg-white shadow-sm dark:bg-zinc-900"
+                    : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                }`}
+              >
+                {t === "pdf" ? "Importer un PDF" : "Éditeur de ticket"}
+              </button>
+            ))}
+          </div>
+
           {!preview ? (
-            <PdfUploader
-              onFile={handleFile}
-              disabled={converting || !selectedId}
-            />
+            tab === "pdf" ? (
+              <PdfUploader
+                onFile={handlePdfFile}
+                disabled={converting || !selectedId}
+              />
+            ) : (
+              <TicketEditor
+                widthDots={widthDots}
+                onRender={handleRenderTicket}
+                disabled={converting || !selectedId}
+              />
+            )
           ) : (
             <div>
-              <div className="mb-4 max-h-[420px] overflow-y-auto rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-950">
+              <div className="mb-4 max-h-[520px] overflow-y-auto rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-950">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={previewUrl(preview.job_id)}
@@ -140,14 +215,14 @@ export default function Home() {
                   }}
                   className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700"
                 >
-                  Annuler
+                  Retour
                 </button>
               </div>
             </div>
           )}
           {converting && (
             <div className="mt-4 text-center text-sm text-zinc-500">
-              Conversion en cours...
+              Génération en cours...
             </div>
           )}
         </section>

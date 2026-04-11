@@ -38,7 +38,8 @@ type Props = {
 };
 
 const DEFAULT_FONT_SIZE = 28;
-const MAX_DISPLAY_WIDTH = 560;
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 2;
 
 export function PdfEditor({ widthDots, onCompose, onError, disabled }: Props) {
   const [image, setImage] = useState<EditImageResponse | null>(null);
@@ -57,14 +58,16 @@ export function PdfEditor({ widthDots, onCompose, onError, disabled }: Props) {
     offsetY: number;
   } | null>(null);
   const [mode, setMode] = useState<"select" | "addText">("select");
+  const [zoom, setZoom] = useState(1);
 
   const fileRef = useRef<HTMLInputElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const displayScale = image
-    ? Math.min(1, MAX_DISPLAY_WIDTH / image.width)
-    : 1;
+  // Zoom drives the display scale directly. At 1.0 we show the image
+  // at its native backend DPI (200), which gives crisp text and readable
+  // edit boxes; the viewport scrolls both ways for large PDFs.
+  const displayScale = zoom;
 
   const handleFile = async (file: File) => {
     if (!file.name.toLowerCase().endsWith(".pdf")) {
@@ -89,7 +92,8 @@ export function PdfEditor({ widthDots, onCompose, onError, disabled }: Props) {
     if (!image || !containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
     const scrollTop = containerRef.current.scrollTop;
-    const x = (clientX - rect.left) / displayScale;
+    const scrollLeft = containerRef.current.scrollLeft;
+    const x = (clientX - rect.left + scrollLeft) / displayScale;
     const y = (clientY - rect.top + scrollTop) / displayScale;
     const id = Math.random().toString(36).slice(2, 10);
     setAnnotations((prev) => [
@@ -139,9 +143,10 @@ export function PdfEditor({ widthDots, onCompose, onError, disabled }: Props) {
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const scrollTop = containerRef.current?.scrollTop ?? 0;
+    const scrollLeft = containerRef.current?.scrollLeft ?? 0;
     setDragState({
       id: a.id,
-      offsetX: (e.clientX - rect.left) / displayScale - a.x,
+      offsetX: (e.clientX - rect.left + scrollLeft) / displayScale - a.x,
       offsetY: (e.clientY - rect.top + scrollTop) / displayScale - a.y,
     });
   };
@@ -152,8 +157,9 @@ export function PdfEditor({ widthDots, onCompose, onError, disabled }: Props) {
       const rect = containerRef.current?.getBoundingClientRect();
       if (!rect) return;
       const scrollTop = containerRef.current?.scrollTop ?? 0;
+      const scrollLeft = containerRef.current?.scrollLeft ?? 0;
       updateAnnotation(dragState.id, {
-        x: (e.clientX - rect.left) / displayScale - dragState.offsetX,
+        x: (e.clientX - rect.left + scrollLeft) / displayScale - dragState.offsetX,
         y: (e.clientY - rect.top + scrollTop) / displayScale - dragState.offsetY,
       });
     };
@@ -310,6 +316,26 @@ export function PdfEditor({ widthDots, onCompose, onError, disabled }: Props) {
         </button>
       </div>
 
+      <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+        <span>Zoom</span>
+        <input
+          type="range"
+          min={MIN_ZOOM}
+          max={MAX_ZOOM}
+          step={0.1}
+          value={zoom}
+          onChange={(e) => setZoom(parseFloat(e.target.value))}
+          className="flex-1 max-w-[200px]"
+        />
+        <span className="w-10 text-right">{Math.round(zoom * 100)}%</span>
+        <button
+          onClick={() => setZoom(1)}
+          className="ml-1 rounded-md border border-zinc-200 px-2 py-0.5 text-xs hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+        >
+          100%
+        </button>
+      </div>
+
       <p className="text-xs text-zinc-500 dark:text-zinc-400">
         {mode === "addText"
           ? "Clique sur le PDF pour ajouter un texte libre."
@@ -319,13 +345,19 @@ export function PdfEditor({ widthDots, onCompose, onError, disabled }: Props) {
       <div
         ref={containerRef}
         onClick={handleCanvasClick}
-        className="relative mx-auto overflow-auto rounded-xl border border-zinc-200 bg-white dark:border-zinc-800"
+        className="w-full overflow-auto rounded-xl border border-zinc-200 bg-white dark:border-zinc-800"
         style={{
-          width: image.width * displayScale,
-          maxHeight: 560,
+          maxHeight: 640,
           cursor: mode === "addText" ? "crosshair" : "default",
         }}
       >
+        <div
+          className="relative"
+          style={{
+            width: image.width * displayScale,
+            height: image.height * displayScale,
+          }}
+        >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           ref={imgRef}
@@ -425,6 +457,7 @@ export function PdfEditor({ widthDots, onCompose, onError, disabled }: Props) {
             </div>
           );
         })}
+        </div>
       </div>
 
       {selectedSpan && (

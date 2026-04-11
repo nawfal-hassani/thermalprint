@@ -68,7 +68,7 @@ async def convert_pdf_for_edit(file: UploadFile = File(...)):
 
     try:
         _, w, h = pdf_to_edit_png(pdf_path, png_path)
-        spans = extract_spans(pdf_path, dpi=150)
+        spans = extract_spans(pdf_path, dpi=200)
     except ConversionError as e:
         raise HTTPException(500, str(e))
     except Exception as e:

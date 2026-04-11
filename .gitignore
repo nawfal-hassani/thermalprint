@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+.pytest_cache/
+
+# Node
+node_modules/
+.next/
+out/
+dist/
+*.log
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Runtime
+uploads/
+tmp/
+*.png
+*.pdf
+!docs/**/*.png
+!docs/**/*.pdf
+
+# OS
+Thumbs.db

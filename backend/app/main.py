@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .converter.router import router as converter_router
 from .print_job.router import router as print_router
 from .printers.router import router as printers_router
+from .status.router import router as status_router
 
 app = FastAPI(
     title="ThermalPrint Studio",
@@ -23,6 +24,7 @@ app.add_middleware(
 app.include_router(printers_router)
 app.include_router(converter_router)
 app.include_router(print_router)
+app.include_router(status_router)
 
 
 @app.get("/api/health")

@@ -62,3 +62,29 @@ export async function printJob(
 export function previewUrl(jobId: string): string {
   return `${API_BASE}/api/convert/preview/${jobId}`;
 }
+
+export type PrinterStatus = {
+  printer_id: string;
+  online: boolean;
+  cover_open: boolean;
+  paper_ok: boolean;
+  paper_near_end: boolean;
+  paper_empty: boolean;
+  error: boolean;
+  cutter_error: boolean;
+  reachable: boolean;
+  message?: string | null;
+};
+
+export function statusWsUrl(printerId: string): string {
+  const base = API_BASE.replace(/^http/, "ws");
+  return `${base}/api/status/ws/${encodeURIComponent(printerId)}`;
+}
+
+export async function scanNetwork(subnet?: string): Promise<Printer[]> {
+  const url = new URL(`${API_BASE}/api/printers/scan-network`);
+  if (subnet) url.searchParams.set("subnet", subnet);
+  const res = await fetch(url.toString(), { method: "POST" });
+  if (!res.ok) throw new Error(`Network scan failed: ${res.status}`);
+  return res.json();
+}

@@ -46,17 +46,67 @@ export async function convertPdf(
 export async function printJob(
   printerId: string,
   jobId: string,
-  cut: boolean = true,
-): Promise<void> {
+  opts: { cut?: boolean; title?: string; source?: "pdf" | "ticket" } = {},
+): Promise<{ history_id: string }> {
   const res = await fetch(`${API_BASE}/api/print`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ printer_id: printerId, job_id: jobId, cut }),
+    body: JSON.stringify({
+      printer_id: printerId,
+      job_id: jobId,
+      cut: opts.cut ?? true,
+      title: opts.title,
+      source: opts.source ?? "pdf",
+    }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail ?? "Print failed");
   }
+  return res.json();
+}
+
+export type HistoryEntry = {
+  id: string;
+  source: "pdf" | "ticket";
+  title: string;
+  printer_id: string;
+  printer_name: string;
+  width_dots: number;
+  created_at: number;
+  image_path: string;
+};
+
+export async function fetchHistory(): Promise<HistoryEntry[]> {
+  const res = await fetch(`${API_BASE}/api/history`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Failed to load history: ${res.status}`);
+  return res.json();
+}
+
+export async function reprintHistory(
+  entryId: string,
+  printerId?: string,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/history/${entryId}/reprint`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ printer_id: printerId ?? null }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail ?? "Reprint failed");
+  }
+}
+
+export async function deleteHistory(entryId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/history/${entryId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
+}
+
+export function historyPreviewUrl(entryId: string): string {
+  return `${API_BASE}/api/history/${entryId}/preview`;
 }
 
 export function previewUrl(jobId: string): string {

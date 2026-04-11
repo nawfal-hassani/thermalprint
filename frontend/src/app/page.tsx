@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { HistoryList } from "@/components/HistoryList";
 import { PdfUploader } from "@/components/PdfUploader";
 import { PrinterList } from "@/components/PrinterList";
 import { TicketEditor } from "@/components/TicketEditor";
@@ -30,6 +31,9 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("pdf");
+  const [historyRefresh, setHistoryRefresh] = useState(0);
+  const [lastSource, setLastSource] = useState<"pdf" | "ticket">("pdf");
+  const [lastTitle, setLastTitle] = useState<string>("");
 
   const selectedPrinter = printers.find((p) => p.id === selectedId);
   const widthDots = selectedPrinter?.width_dots ?? 512;
@@ -82,6 +86,8 @@ export default function Home() {
       try {
         const result = await convertPdf(file, widthDots, true);
         setPreview(result);
+        setLastSource("pdf");
+        setLastTitle(file.name.replace(/\.pdf$/i, ""));
       } catch (e) {
         setError(e instanceof Error ? e.message : "Conversion échouée");
       } finally {
@@ -100,6 +106,8 @@ export default function Home() {
       try {
         const result = await renderTicket(data);
         setPreview(result);
+        setLastSource("ticket");
+        setLastTitle(data.shop_name);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Rendu échoué");
       } finally {
@@ -115,8 +123,12 @@ export default function Home() {
     setError(null);
     setSuccess(null);
     try {
-      await printJob(selectedId, preview.job_id);
+      await printJob(selectedId, preview.job_id, {
+        title: lastTitle,
+        source: lastSource,
+      });
       setSuccess("Ticket envoyé à l'imprimante !");
+      setHistoryRefresh((n) => n + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Impression échouée");
     } finally {
@@ -226,6 +238,17 @@ export default function Home() {
             </div>
           )}
         </section>
+      </div>
+
+      <div className="mt-6">
+        <HistoryList
+          currentPrinterId={selectedId}
+          refreshSignal={historyRefresh}
+          onMessage={(msg) => {
+            if (msg.success) setSuccess(msg.success);
+            if (msg.error) setError(msg.error);
+          }}
+        />
       </div>
 
       <footer className="mt-10 text-center text-xs text-zinc-500 dark:text-zinc-500">

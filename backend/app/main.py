@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .converter.router import router as converter_router
 from .printers.router import router as printers_router
 
 app = FastAPI(
@@ -19,6 +20,7 @@ app.add_middleware(
 
 
 app.include_router(printers_router)
+app.include_router(converter_router)
 
 
 @app.get("/api/health")

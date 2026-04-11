@@ -25,11 +25,23 @@ export async function fetchPrinters(): Promise<Printer[]> {
   return res.json();
 }
 
+export type TextSpan = {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  text: string;
+  font_size: number;
+  bold: boolean;
+};
+
 export type EditImageResponse = {
   edit_id: string;
   image_url: string;
   width: number;
   height: number;
+  spans: TextSpan[];
 };
 
 export async function uploadPdfForEdit(file: File): Promise<EditImageResponse> {

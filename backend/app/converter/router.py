@@ -12,6 +12,7 @@ from .pdf_to_ticket import (
     pdf_to_edit_png,
     pdf_to_thermal_png,
 )
+from .text_extract import extract_spans
 
 router = APIRouter(prefix="/api/convert", tags=["convert"])
 
@@ -67,14 +68,18 @@ async def convert_pdf_for_edit(file: UploadFile = File(...)):
 
     try:
         _, w, h = pdf_to_edit_png(pdf_path, png_path)
+        spans = extract_spans(pdf_path, dpi=150)
     except ConversionError as e:
         raise HTTPException(500, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"Text extraction failed: {e}")
 
     return {
         "edit_id": job_id,
         "image_url": f"/api/convert/edit-image/{job_id}",
         "width": w,
         "height": h,
+        "spans": [s.to_dict() for s in spans],
     }
 
 

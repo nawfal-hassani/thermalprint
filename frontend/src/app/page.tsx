@@ -40,19 +40,24 @@ export default function Home() {
   const selectedPrinter = printers.find((p) => p.id === selectedId);
   const widthDots = selectedPrinter?.width_dots ?? 512;
 
-  const refreshPrinters = useCallback(async () => {
-    setLoadingPrinters(true);
-    setError(null);
+  const loadPrinters = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoadingPrinters(true);
     try {
       const list = await fetchPrinters();
       setPrinters(list);
       setSelectedId((current) => current ?? list[0]?.id ?? null);
+      setError(null);
+      return true;
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erreur inconnue");
+      if (!opts?.silent)
+        setError(e instanceof Error ? e.message : "Erreur inconnue");
+      return false;
     } finally {
-      setLoadingPrinters(false);
+      if (!opts?.silent) setLoadingPrinters(false);
     }
   }, []);
+
+  const refreshPrinters = useCallback(() => loadPrinters(), [loadPrinters]);
 
   const handleScanNetwork = useCallback(async () => {
     setScanningNetwork(true);
@@ -75,9 +80,36 @@ export default function Home() {
     }
   }, []);
 
+  // The backend may still be booting when the page loads (`make dev` starts
+  // both at once), and a printer can be plugged in after the page is open.
+  // Retry the first fetch a few times, then poll quietly to catch hotplug.
   useEffect(() => {
-    refreshPrinters();
-  }, [refreshPrinters]);
+    let cancelled = false;
+    let pollTimer: ReturnType<typeof setInterval> | undefined;
+
+    const startup = async () => {
+      setLoadingPrinters(true);
+      let ok = false;
+      for (let attempt = 0; attempt < 8 && !cancelled; attempt++) {
+        ok = await loadPrinters({ silent: true });
+        if (ok || cancelled) break;
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+      if (cancelled) return;
+      setLoadingPrinters(false);
+      if (!ok)
+        setError(
+          "Backend injoignable. Vérifie qu'il tourne sur :8000 puis clique sur Actualiser.",
+        );
+      pollTimer = setInterval(() => loadPrinters({ silent: true }), 5000);
+    };
+
+    startup();
+    return () => {
+      cancelled = true;
+      if (pollTimer) clearInterval(pollTimer);
+    };
+  }, [loadPrinters]);
 
   const handlePdfFile = useCallback(
     async (file: File) => {
